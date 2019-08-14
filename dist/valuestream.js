@@ -3,69 +3,88 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-const WebSocket = require("ws");
-const rxjs_1 = require("rxjs");
+const ws_1 = __importDefault(require("ws"));
 const queueing_subject_1 = require("queueing-subject");
+const rxjs_1 = require("rxjs");
 const operators_1 = require("rxjs/operators");
 const rxjs_websockets_1 = __importDefault(require("rxjs-websockets"));
-const CHAT_WS_URL = "ws://127.0.0.1/CHAT";
-const VPCA_WS_URL = "ws://127.0.0.1/VPCA";
-// Define how we create a Web Socket
-const options = {
-    makeWebSocket: (url, protocols) => new WebSocket(url, protocols),
-    protocols: [],
-};
-// Create the requests that will be sent on open
-const vpcaRequest = {
-    WPUSHG: {
-        WPUSHGID: "VPCA",
-        Maxrate: 1000,
-        Minrate: 2000
+class ValueStream {
+    constructor(config) {
+        this.options = {
+            makeWebSocket: (url, protocols) => new ws_1.default(url),
+            protocols: [],
+        };
+        this.config = config;
+        this.buildStream();
     }
-};
-const chatRequest = {
-    WPUSHG: {
-        WPUSHGID: "CHAT",
-        Maxrate: 1000,
-        Minrate: 2000
+    buildUrl(appName) {
+        return `ws://${this.config.wsHost}/${appName}`;
     }
-};
-const vpcaInput = new queueing_subject_1.QueueingSubject();
-const chatInput = new queueing_subject_1.QueueingSubject();
-vpcaInput.next(JSON.stringify(vpcaRequest));
-chatInput.next(JSON.stringify(chatRequest));
-// Create each of the Web Socket observables
-const vpca = rxjs_websockets_1.default(VPCA_WS_URL, options);
-const chat = rxjs_websockets_1.default(CHAT_WS_URL, options);
-// Create each of the message streams
-const vpcaMessages = vpca.pipe(operators_1.switchMap((getResponses) => getResponses(vpcaInput)), operators_1.share());
-const chatMessages = chat.pipe(operators_1.switchMap((getResponses) => getResponses(chatInput)), operators_1.share());
-// Combine observables
-const allMessages = rxjs_1.merge(vpcaMessages, chatMessages);
-// Raw parse function
-const parseRaw = msg => {
-    let parsed = null;
-    try {
-        if (typeof msg == "string" && msg.trim() != "") {
-            parsed = JSON.parse(msg.trim());
-        }
+    buildStream() {
+        const inputs = this.buildInputs();
+        const observables = this.buildObservables();
+        this.buildAndCombineStreams(observables, inputs);
     }
-    catch (e) { }
-    return parsed;
-};
-// Parse function
-const parse = data => {
-    let parsed = parseRaw(data);
-    if (parsed && parsed["MGP"]) {
+    buildAndCombineStreams(observables, inputs) {
+        const { vpca, chat } = observables;
+        const { vpcaInput, chatInput } = inputs;
+        // Create each of the message streams
+        const vpcaMessages = vpca.pipe(operators_1.switchMap((getResponses) => getResponses(vpcaInput)), operators_1.share());
+        const chatMessages = chat.pipe(operators_1.switchMap((getResponses) => getResponses(chatInput)), operators_1.share());
+        // Combine observables
+        const allMessages = rxjs_1.merge(vpcaMessages, chatMessages);
+        // Map and parse
+        this.messages = allMessages.pipe(operators_1.map(val => this.parse(val)), operators_1.filter(val => val != undefined), operators_1.share());
+    }
+    buildObservables() {
+        const vpca = rxjs_websockets_1.default(this.buildUrl('VPCA'), this.options);
+        const chat = rxjs_websockets_1.default(this.buildUrl('CHAT'), this.options);
         return {
-            id: parsed["MGP"]["MGPID"],
-            label: parsed["MGP"]["MGPLabel"],
-            value: parsed["MGP"]["ParamVal"],
-            timestamp: parsed["MGP"]["Timestamp"]
+            vpca,
+            chat
         };
     }
-};
-// Map and parse
-const messages = allMessages.pipe(operators_1.map(val => parse(val)), operators_1.filter(val => val != undefined), operators_1.catchError(error => rxjs_1.of(`${error.message}`)));
-console.log(messages);
-exports.default = messages;
+    buildInputs() {
+        const vpcaInput = new queueing_subject_1.QueueingSubject();
+        const vpcaRequest = this.buildRequest(this.config.vpcaGroup);
+        vpcaInput.next(JSON.stringify(vpcaRequest));
+        const chatInput = new queueing_subject_1.QueueingSubject();
+        const chatRequest = this.buildRequest(this.config.chatGroup);
+        chatInput.next(JSON.stringify(chatRequest));
+        return {
+            vpcaInput,
+            chatInput
+        };
+    }
+    buildRequest(group) {
+        return {
+            WPUSHG: {
+                WPUSHGID: group,
+                Maxrate: this.config.maxRate,
+                Minrate: this.config.minRate
+            }
+        };
+    }
+    parse(data) {
+        let parsed = this.parseRaw(data);
+        if (parsed && parsed["MGP"]) {
+            return {
+                id: parsed["MGP"]["MGPID"],
+                label: parsed["MGP"]["MGPLabel"],
+                value: parsed["MGP"]["ParamVal"],
+                timestamp: parsed["MGP"]["Timestamp"]
+            };
+        }
+    }
+    parseRaw(msg) {
+        let parsed = null;
+        try {
+            if (typeof msg == "string" && msg.trim() != "") {
+                parsed = JSON.parse(msg.trim());
+            }
+        }
+        catch (e) { }
+        return parsed;
+    }
+}
+exports.default = ValueStream;

@@ -22,6 +22,21 @@ export interface ShouldEmitFunction {
 export interface EventItemConfig {
 	name: string
 	params: Array<string>
-	caclulate: CalculateFunction
+	calculate: CalculateFunction
 	shouldEmit: ShouldEmitFunction
+}
+
+export interface StreamValue {
+  id: number
+  label: string
+  value: any
+  timestamp: string
+}
+
+export interface ValueStreamConfig {
+  wsHost: string
+  vpcaGroup: string
+  chatGroup: string
+  maxRate: number
+  minRate: number
 }
