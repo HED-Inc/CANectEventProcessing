@@ -1,6 +1,6 @@
 import WebSocket from "ws";
 import { QueueingSubject } from "queueing-subject";
-import { Subscription, merge, of, Observable } from "rxjs";
+import { Subscription, Observable, merge } from "rxjs";
 import { StreamValue, ValueStreamConfig } from './interfaces';
 import { share, switchMap, map, filter, catchError } from "rxjs/operators";
 import makeWebSocketObservable, {
@@ -11,9 +11,15 @@ import makeWebSocketObservable, {
 
 type WebSocketPayload = string | ArrayBuffer | Blob;
 
+const VPCA_APP_NAME = 'VPCA';
+const CHAT_APP_NAME = 'CHAT';
+
 export default class ValueStream
 {
     private config:ValueStreamConfig;
+
+    private vpcaInput:QueueingSubject<string>;
+    private chatInput:QueueingSubject<string>;
 
     public messages:Observable<string | StreamValue>;
 
@@ -25,82 +31,117 @@ export default class ValueStream
     public constructor(config:ValueStreamConfig)
     {
         this.config = config;
+
         this.buildStream();
     }
 
-    private buildUrl(appName:string)
+    private buildUrl(app_name:string)
     {
-        return `ws://${this.config.wsHost}/${appName}`;
+        return `ws://${this.config.ws_host}/${app_name}`;
     }
 
     private buildStream()
     {
-        const inputs = this.buildInputs();
-        const observables = this.buildObservables();
-
-        this.buildAndCombineStreams(observables, inputs);
+        this.buildInputs();
+        this.buildAndCombineStreams();
     }
 
-    private buildAndCombineStreams(observables, inputs)
+    private buildAndCombineStreams()
     {
+        const observables = this.buildObservables();
+
         const { vpca, chat } = observables;
-        const { vpcaInput, chatInput } = inputs;
 
         // Create each of the message streams
-        const vpcaMessages:Observable<WebSocketPayload> = vpca.pipe(
-          switchMap((getResponses:GetWebSocketResponses) => getResponses(vpcaInput)),
-          share()
-        );
-        const chatMessages:Observable<WebSocketPayload> = chat.pipe(
-          switchMap((getResponses:GetWebSocketResponses) => getResponses(chatInput)),
-          share()
-        );
+        let vpca_messages:Observable<WebSocketPayload> = null;
+        if (this.config.vpca_group) {
+            vpca_messages = vpca.pipe(
+              switchMap((getResponses:GetWebSocketResponses) => getResponses(this.vpcaInput)),
+              share()
+            );
+        }
 
-        // Combine observables
-        const allMessages = merge(vpcaMessages, chatMessages);
+        let chat_messages:Observable<WebSocketPayload> = null;
+        if (this.config.chat_group) {
+            chat_messages = chat.pipe(
+              switchMap((getResponses:GetWebSocketResponses) => getResponses(this.chatInput)),
+              share()
+            );
+        }
+
+        // Determine if we need to combine
+        let all_messages;
+        if (chat_messages && vpca_messages) {
+            all_messages = merge(vpca_messages, chat_messages);
+        } else if (!vpca_messages && chat_messages) {
+            all_messages = chat_messages;
+        } else if (vpca_messages && !chat_messages) {
+            all_messages = vpca_messages;
+        } else {
+            throw new Error('Provide either vpca_group or chat_group');
+        }
 
         // Map and parse
-        this.messages = allMessages.pipe(
+        this.messages = all_messages.pipe(
             map(val => this.parse(val)),
             filter(val => val != undefined),
             share()
         );
     }
 
+    public setParameter(name:string|number, value:string|number)
+    {
+        const r = {
+            WSP : {
+                WSPID : name,
+                WSPUnits : '1',
+                WSPVal : String(value)
+            }
+        };
+
+        // Parameters can only be set on VPCA
+        this.vpcaInput.next(JSON.stringify(r));
+    }
+
     private buildObservables()
     {
-        const vpca = makeWebSocketObservable(this.buildUrl('VPCA'), this.options);
-        const chat = makeWebSocketObservable(this.buildUrl('CHAT'), this.options);
+        let vpca = null;
+        if (this.config.vpca_group) {
+            vpca = makeWebSocketObservable(this.buildUrl(VPCA_APP_NAME), this.options);
+        }
+        let chat = null;
+        if (this.config.chat_group) {
+            chat = makeWebSocketObservable(this.buildUrl(CHAT_APP_NAME), this.options);
+        }
 
         return {
             vpca,
             chat
-        }
+        };
     }
 
     private buildInputs()
     {
-        const vpcaInput = new QueueingSubject<string>();
-        const vpcaRequest = this.buildRequest(this.config.vpcaGroup);
-        vpcaInput.next(JSON.stringify(vpcaRequest));
+        if (this.config.vpca_group) {
+            this.vpcaInput = new QueueingSubject<string>();
+            const vpcaRequest = this.buildGroupRequest(this.config.vpca_group);
+            this.vpcaInput.next(JSON.stringify(vpcaRequest));
+        }
 
-        const chatInput = new QueueingSubject<string>();
-        const chatRequest = this.buildRequest(this.config.chatGroup);
-        chatInput.next(JSON.stringify(chatRequest));
-
-        return {
-            vpcaInput,
-            chatInput
-        };
+        if (this.config.chat_group) {
+            this.chatInput = new QueueingSubject<string>();
+            const chatRequest = this.buildGroupRequest(this.config.chat_group);
+            this.chatInput.next(JSON.stringify(chatRequest));
+        }
     }
 
-    private buildRequest(group:string)
+    private buildGroupRequest(group:string)
     {
         return {
             WPUSHG: {
                 WPUSHGID: group,
-                Maxrate: this.config.maxRate,
-                Minrate: this.config.minRate
+                Maxrate: this.config.max_rate,
+                Minrate: this.config.min_rate
             }
         };
     }
@@ -114,18 +155,19 @@ export default class ValueStream
                 label: parsed["MGP"]["MGPLabel"],
                 value: parsed["MGP"]["ParamVal"],
                 timestamp: parsed["MGP"]["Timestamp"]
-            }
+            };
         }
     }
 
     private parseRaw(msg:any)
     {
-        let parsed = null
+        let parsed = null;
         try {
             if (typeof msg == "string" && msg.trim() != "") {
-                parsed = JSON.parse(msg.trim())
+                parsed = JSON.parse(msg.trim());
             }
         } catch (e) {}
-        return parsed
+
+        return parsed;
     }
 }

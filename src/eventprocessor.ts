@@ -5,9 +5,7 @@ import { EventItemConfig, EmittedEvent, StateElement, ValueStreamConfig } from '
 
 // Helper function to filter invalid values
 const NULL_STR = "NULL";
-const isValid = (val:any) => {
-	return val != NULL_STR && val != "";
-}
+const isValid = (val:any) => val != NULL_STR && val != "";
 
 export default class EventProcessor
 {
@@ -30,7 +28,7 @@ export default class EventProcessor
 		this.initExitHandler();
 	}
 
-	public run()
+	private async run()
 	{
 		if (!this.eventConfigs.length) {
 			throw new Error('No event configuration given');
@@ -42,20 +40,24 @@ export default class EventProcessor
 			current,
 			previous,
 			timestamp,
-			timeDiff,
+			time_diff,
+			outputs,
 			now = null;
 
 		this.valuesStreamSub = this.valueStream.messages.subscribe((msg:any) => {
 			// Validate the value
 			if (!isValid(msg.value)) return;
 
-			this.eventConfigs.forEach(c => {
+			console.log(msg);
+
+			// Iterate over each of the event configurations
+			this.eventConfigs.forEach(async ec => {
 				// Check if it is used in this function
-				param_idx = c.params.indexOf(msg.label);
+				param_idx = ec.params.indexOf(msg.label);
 				if (param_idx == -1) return;
 
 				// Find the current state
-				state_idx = this.states.findIndex(s => s.name == c.name);
+				state_idx = this.states.findIndex(s => s.name == ec.name);
 				if (state_idx == -1) return;
 
 				// Set the current value in the same param_idx
@@ -67,8 +69,18 @@ export default class EventProcessor
 				// Previous result
 				previous = this.states[state_idx].previous;
 
+				// Determine if outputs are defined from previous callbacks
+				outputs = null;
+				if (this.states[state_idx].outputs != null) {
+					outputs = this.buildOutputs(this.states[state_idx].outputs);
+				}
+
 				// Invoke the callback
-				current = c.calculate(previous, [...this.states[state_idx].values]);
+				if (outputs) {
+					current = await ec.calculate(previous, [...this.states[state_idx].values], [...outputs]);
+				} else {
+					current = await ec.calculate(previous, [...this.states[state_idx].values]);
+				}
 
 				// Test the current to cache
 				if (current != previous) {
@@ -78,18 +90,25 @@ export default class EventProcessor
 					// Get the previous time
 					timestamp = this.states[state_idx].timestamp;
 					if (timestamp) {
-						timeDiff = now - timestamp;
+						time_diff = now - timestamp;
 					}
 
 					// Determine if the event should fire
-					if (c.hasOwnProperty("shouldEmit") &&
-						c.shouldEmit(previous, current, timeDiff)
-					) {
-						this.bus.next({
-							name: c.name,
-							value: current,
-							timestamp: now
-						});
+					if (ec.hasOwnProperty("shouldEmit")) {
+						// Invoke
+						let should_emit = await ec.shouldEmit(previous, current, time_diff);
+						if (should_emit) {
+							this.bus.next({
+								name: ec.name,
+								value: current,
+								timestamp: now
+							});
+						}
+					}
+
+					// Set the current value
+					if (ec.set_param) {
+						this.valueStream.setParameter(ec.set_param, current);
 					}
 
 					// Update the previous value
@@ -102,20 +121,32 @@ export default class EventProcessor
 		});
 	}
 
-	private buildStates()
+	private buildOutputs(list:Array<string>)
+	{
+		// Filter -> sort -> map to get array of values in order
+		return this.states.filter(s => list.includes(s.name))
+			.sort((a, b) => list.indexOf(a.name) - list.indexOf(b.name))
+			.map(s => s.previous);
+	}
+
+	private buildState()
 	{
 		// Filter out any removed
-		const eventNames = this.eventConfigs.map(ec => ec.name);
-		this.states = this.states.filter(s => {
-			return eventNames.includes(s.name);
-		});
+		const event_names = this.eventConfigs.map(ec => ec.name);
+		this.states = this.states.filter(s => event_names.includes(s.name));
 
 		// Add any not in
-		const stateNames = this.states.map(s => s.name);
+		const state_names = this.states.map(s => s.name);
 		this.eventConfigs.forEach(ec => {
-			if (!stateNames.includes(ec.name)) {
+			if (!state_names.includes(ec.name)) {
+				let outputs = null;
+				if (ec.outputs) {
+					outputs = new Array(ec.outputs.length);
+				}
+
 				this.states.push({
 					name: ec.name,
+					outputs,
 					values: new Array(ec.params.length),
 					previous: null,
 					timestamp: 0
@@ -131,8 +162,8 @@ export default class EventProcessor
 
 	public addEvents(events:Array<EventItemConfig>)
 	{
-		events.map(e => this.addEvent(e, false))
-		this.buildStates();
+		events.map(e => this.addEvent(e, false));
+		this.buildState();
 		return this;
 	}
 
@@ -142,7 +173,7 @@ export default class EventProcessor
 		if (!e) {
 			this.eventConfigs.push(event);
 			if (renew) {
-				this.buildStates();
+				this.buildState();
 			}
 		}
 		return this;
@@ -153,7 +184,7 @@ export default class EventProcessor
 		let e = this.findEvent(name);
 		if (e) {
 			this.eventConfigs.splice(this.eventConfigs.indexOf(e), 1);
-			this.buildStates();
+			this.buildState();
 		}
 		return this;
 	}
@@ -177,8 +208,6 @@ export default class EventProcessor
 	private initExitHandler()
 	{
 		// Unsubscribing
-		process.on('exit', () => {
-			this.unsubscribe();
-		});
+		process.on('exit', () => this.unsubscribe());
 	}
 }
