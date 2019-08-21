@@ -6,7 +6,7 @@
   "scripts": {
     "build": "tsc",
     "start": "ts-node ./src/index.ts",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "prepare": "npm run build"
   },
   "author": "",
   "license": "ISC",
@@ -14,11 +14,12 @@
     "queueing-subject": "^0.3.4",
     "rxjs": "^6.5.2",
     "rxjs-websockets": "^7.0.2",
-    "ws": "^7.1.1"
+    "ws": "^6.1.4"
   },
   "devDependencies": {
     "@types/node": "^12.7.1",
     "@types/ws": "^6.0.2",
+    "dotenv": "^8.0.0",
     "ts-node": "^8.3.0",
     "typescript": "^3.5.3"
   }

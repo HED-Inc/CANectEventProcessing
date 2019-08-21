@@ -2,11 +2,15 @@ const EXAMPLE_EVENT = {
 	// Unique arbitrary name
 	name: "SHOCK_EVENT",
 
+	set_param: "My_Param",
+
 	// Parameter labels to pass to 'calculate'
-	params: ["Acc_mag"],
+	params: ["Acc_mag", "X_tilt"],
+
+	outputs: ['OTHER_EVENT'],
 
 	// Logic callback with params in same order as above after 'prev'
-	calculate: (prev:any, [Acc_mag]:Array<any>) => {
+	async calculate (prev:any, [Acc_mag, X_Tilt]:Array<any>, [OTHER_EVENT]:Array<any>) {
 		return Acc_mag;
 	},
 
@@ -18,7 +22,7 @@ const EXAMPLE_EVENT = {
 	 * @param {timeDiff} time difference since last call in ms
 	 * @returns {boolean}
 	 */
-	shouldEmit: (prev:any, curr:any, timeDiff:any) => {
+	async shouldEmit (prev:any, curr:any, timeDiff:any) {
 		return curr > 1024;
 	}
 };
