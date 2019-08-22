@@ -76,8 +76,8 @@ export default class EventProcessor
 
 				// Determine if outputs are defined from previous callbacks
 				outputs = null;
-				if (this.states[state_idx].outputs !== null) {
-					outputs = this.buildOutputs(this.states[state_idx].outputs);
+				if (ec.outputs && ec.outputs !== null) {
+					outputs = this.buildOutputs(ec.outputs);
 				}
 
 				// Invoke the callback
@@ -134,7 +134,7 @@ export default class EventProcessor
 			.map(s => s.previous);
 	}
 
-	private buildState()
+	private buildStates()
 	{
 		// Filter out any removed
 		const event_names = this.eventConfigs.map(ec => ec.name);
@@ -144,14 +144,8 @@ export default class EventProcessor
 		const state_names = this.states.map(s => s.name);
 		this.eventConfigs.forEach(ec => {
 			if (!state_names.includes(ec.name)) {
-				let outputs = null;
-				if (ec.outputs) {
-					outputs = new Array(ec.outputs.length);
-				}
-
 				this.states.push({
 					name: ec.name,
-					outputs,
 					values: new Array(ec.params.length),
 					previous: null,
 					timestamp: 0
@@ -173,7 +167,7 @@ export default class EventProcessor
 	public addEvents(events:Array<EventItemConfig>)
 	{
 		events.map(e => this.addEvent(e, false));
-		this.buildState();
+		this.buildStates();
 		return this;
 	}
 
@@ -183,7 +177,7 @@ export default class EventProcessor
 		if (!e) {
 			this.eventConfigs.push(event);
 			if (renew) {
-				this.buildState();
+				this.buildStates();
 			}
 		}
 		return this;
@@ -194,7 +188,7 @@ export default class EventProcessor
 		let e = this.findEvent(name);
 		if (e) {
 			this.eventConfigs.splice(this.eventConfigs.indexOf(e), 1);
-			this.buildState();
+			this.buildStates();
 		}
 		return this;
 	}

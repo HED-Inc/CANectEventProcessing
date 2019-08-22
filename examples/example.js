@@ -2,13 +2,26 @@ let EventProcessor = require("../dist/index.js")
 
 const events = [
 	{
-		name: "SHOCK_EVENT",
-		params: ["Acc_mag"],
-		async calculate(prev, [Acc_mag]) {
-			return Acc_mag * 100
+		name: "CPU_USAGE",
+		outputs: ["GPS_HEAD", "GPS_GS"],
+		params: ["Cpu_usage"],
+		async calculate(prev, [Acc_mag], [GPS_HEAD, GPS_GS]) {
+			console.log("GPS_HEAD", GPS_HEAD)
+			console.log("GPS_GS", GPS_GS)
+			return Acc_mag
 		},
 		async shouldEmit(prev, curr, timeDiff) {
-			return true
+			return false
+		}
+	},
+	{
+		name: "GPS_HEAD",
+		params: ["GPS_head"],
+		async calculate(prev, [GPS_head]) {
+			return GPS_head
+		},
+		async shouldEmit(prev, curr, timeDiff) {
+			return false
 		}
 	}
 ]
@@ -22,12 +35,20 @@ let streamConfig = {
 }
 
 let ep = new EventProcessor(streamConfig, events)
+// ep.setDebug(true)
 
-ep.addEvent(newEvent)
+let NEW_EVENT = {
+	name: "GPS_GS",
+	params: ["GPS_gs"],
+	async calculate(prev, [GPS_gs]) {
+		return GPS_gs
+	},
+	async shouldEmit(prev, curr, timeDiff) {
+		return false
+	}
+}
+ep.addEvent(NEW_EVENT)
+
 let sub = ep.subscribe(e => {
 	console.log("EVENT", e)
 })
-
-setTimeout(() => {
-	ep.addEvent(newEvent)
-}, 5000)

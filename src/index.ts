@@ -1,3 +1,3 @@
 import EventProcessor from './eventprocessor';
 
-export default EventProcessor;
+module.exports = EventProcessor;

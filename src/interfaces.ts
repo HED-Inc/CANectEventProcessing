@@ -7,7 +7,6 @@ export interface EmittedEvent {
 export interface StateElement {
 	name: string
 	values: Array<any>
-	outputs: Array<any> | null
 	previous: any
 	timestamp: number
 }
