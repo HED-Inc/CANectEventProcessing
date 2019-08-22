@@ -2,11 +2,13 @@ const EXAMPLE_EVENT = {
 	// Unique arbitrary name
 	name: "SHOCK_EVENT",
 
+	// VPCA parameter to set when changed
 	set_param: "My_Param",
 
 	// Parameter labels to pass to 'calculate'
 	params: ["Acc_mag", "X_tilt"],
 
+	// Other event values to inject
 	outputs: ['OTHER_EVENT'],
 
 	// Logic callback with params in same order as above after 'prev'

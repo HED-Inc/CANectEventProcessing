@@ -1,6 +1,4 @@
-let EventProcessor = require("./dist/index.js")
-
-console.log(EventProcessor)
+let EventProcessor = require("../dist/index.js")
 
 const events = [
 	{
