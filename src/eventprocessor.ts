@@ -76,7 +76,7 @@ export default class EventProcessor
 
 				// Determine if outputs are defined from previous callbacks
 				outputs = null;
-				if (this.states[state_idx].outputs != null) {
+				if (this.states[state_idx].outputs !== null) {
 					outputs = this.buildOutputs(this.states[state_idx].outputs);
 				}
 
@@ -126,7 +126,7 @@ export default class EventProcessor
 		});
 	}
 
-	private buildOutputs(list:Array<string>)
+	private buildOutputs(list:Array<string>):Array<any>
 	{
 		// Filter -> sort -> map to get array of values in order
 		return this.states.filter(s => list.includes(s.name))
