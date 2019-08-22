@@ -1,4 +1,4 @@
-import { EventProcessor } from "./dist"
+let EventProcessor = require("../dist/index.js")
 
 const events = [
 	{

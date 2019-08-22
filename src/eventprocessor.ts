@@ -9,6 +9,8 @@ const isValid = (val:any) => val != NULL_STR && val != "";
 
 export default class EventProcessor
 {
+	private debug:boolean = false;
+
 	private valueStream:ValueStream;
 	private valuesStreamSub:Subscription;
 
@@ -48,7 +50,10 @@ export default class EventProcessor
 			// Validate the value
 			if (!isValid(msg.value)) return;
 
-			console.log(msg);
+			// Log incoming message if debug
+			if (this.debug) {
+				console.log(msg);
+			}
 
 			// Iterate over each of the event configurations
 			this.eventConfigs.forEach(async ec => {
@@ -153,6 +158,11 @@ export default class EventProcessor
 				});
 			}
 		});
+	}
+
+	public setDebug(debug:boolean)
+	{
+		this.debug = debug;
 	}
 
 	private findEvent(name:string)

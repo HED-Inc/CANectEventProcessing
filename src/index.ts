@@ -1,5 +1,3 @@
 import EventProcessor from './eventprocessor';
 
-export {
-	EventProcessor
-};
+export default EventProcessor;
