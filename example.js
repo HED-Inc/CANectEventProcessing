@@ -1,4 +1,6 @@
-import { EventProcessor } from "./dist"
+let EventProcessor = require("./dist/index.js")
+
+console.log(EventProcessor)
 
 const events = [
 	{

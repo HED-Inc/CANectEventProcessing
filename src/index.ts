@@ -1,5 +1,5 @@
 import EventProcessor from './eventprocessor';
 
-export {
-	EventProcessor
-};
+export default function (config, events) {
+	return new EventProcessor(config, events);
+}
