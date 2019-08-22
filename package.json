@@ -2,13 +2,16 @@
   "name": "canect-event-processing",
   "version": "1.0.0",
   "description": "",
-  "main": "./src/index.js",
+  "main": "./dist/index.js",
   "scripts": {
     "build": "tsc",
     "start": "ts-node ./src/index.ts",
     "prepare": "npm run build"
   },
-  "author": "",
+  "author": "HED",
+  "files": [
+    "dist/index.js"
+  ],
   "license": "ISC",
   "dependencies": {
     "queueing-subject": "^0.3.4",
