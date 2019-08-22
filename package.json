@@ -1,5 +1,5 @@
 {
-  "name": "event-processing",
+  "name": "canect-event-processing",
   "version": "1.0.0",
   "description": "",
   "main": "./src/index.js",
