@@ -6,6 +6,7 @@ To use:
 
 Install:
 `npm i HED-Inc/canect-event-processing`
+
 Import:
 `import EventProcessor from 'canect-event-processing';`
 
