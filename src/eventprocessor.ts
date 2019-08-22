@@ -19,11 +19,11 @@ export default class EventProcessor
 
 	private bus:Subject<EmittedEvent> = new Subject<EmittedEvent>();
 
-	public constructor(streamConfig:ValueStreamConfig, eventConfigs=[])
+	public constructor(streamConfig:ValueStreamConfig, eventConfigs?:Array<EventItemConfig>)
 	{
 		this.valueStream = new ValueStream(streamConfig);
 
-		if (eventConfigs.length) {
+		if (eventConfigs && eventConfigs.length) {
 			this.addEvents(eventConfigs);
 		}
 
