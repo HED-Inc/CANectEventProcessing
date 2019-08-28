@@ -87,39 +87,36 @@ export default class EventProcessor
 					current = await ec.calculate(previous, [...this.states[state_idx].values]);
 				}
 
-				// Test the current to cache
-				if (current != previous) {
-					// Get the current date timestamp
-					now = new Date().getTime();
+				// Get the current date timestamp
+				now = new Date().getTime();
 
-					// Get the previous time
-					timestamp = this.states[state_idx].timestamp;
-					if (timestamp) {
-						time_diff = now - timestamp;
-					}
-
-					// Determine if the event should fire
-					if (ec.hasOwnProperty("shouldEmit")) {
-						// Invoke
-						let should_emit = await ec.shouldEmit(previous, current, time_diff);
-						if (should_emit) {
-							this.bus.next({
-								name: ec.name,
-								value: current,
-								timestamp: now
-							});
-						}
-					}
-
-					// Set the current value
-					if (ec.set_param) {
-						this.valueStream.setParameter(ec.set_param, current);
-					}
-
-					// Update the previous value
-					this.states[state_idx].previous = current;
-					this.states[state_idx].timestamp = now;
+				// Get the previous time
+				timestamp = this.states[state_idx].timestamp;
+				if (timestamp) {
+					time_diff = now - timestamp;
 				}
+
+				// Determine if the event should fire
+				if (ec.hasOwnProperty("shouldEmit")) {
+					// Invoke
+					let should_emit = await ec.shouldEmit(previous, current, time_diff);
+					if (should_emit) {
+						this.bus.next({
+							name: ec.name,
+							value: current,
+							timestamp: now
+						});
+					}
+				}
+
+				// Set the current value
+				if (ec.set_param) {
+					this.valueStream.setParameter(ec.set_param, current);
+				}
+
+				// Update the previous value
+				this.states[state_idx].previous = current;
+				this.states[state_idx].timestamp = now;
 			});
 		}, (error) => {
 			console.log('ERROR', error);
@@ -152,6 +149,11 @@ export default class EventProcessor
 				});
 			}
 		});
+	}
+
+	public getValue(name:string)
+	{
+		return this.states.find((s) => s.name == name);
 	}
 
 	public setDebug(debug:boolean)

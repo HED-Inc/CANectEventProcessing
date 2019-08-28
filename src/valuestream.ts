@@ -48,21 +48,19 @@ export default class ValueStream
 
     private buildAndCombineStreams()
     {
-        const observables = this.buildObservables();
-
-        const { vpca, chat } = observables;
+        const { vpca, chat } = this.buildObservables();
 
         // Create each of the message streams
-        let vpca_messages:Observable<WebSocketPayload> = null;
-        if (this.config.vpca_group) {
+        let vpca_messages:Observable<WebSocketPayload>;
+        if (vpca && this.config.vpca_group) {
             vpca_messages = vpca.pipe(
               switchMap((getResponses:GetWebSocketResponses) => getResponses(this.vpcaInput)),
               share()
             );
         }
 
-        let chat_messages:Observable<WebSocketPayload> = null;
-        if (this.config.chat_group) {
+        let chat_messages:Observable<WebSocketPayload>;
+        if (chat && this.config.chat_group) {
             chat_messages = chat.pipe(
               switchMap((getResponses:GetWebSocketResponses) => getResponses(this.chatInput)),
               share()
