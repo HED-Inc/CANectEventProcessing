@@ -90,21 +90,29 @@ export default class EventProcessor
 				}
 
 				// Determine if the event should fire
-				if (ec.hasOwnProperty("shouldEmit")) {
-					// Invoke
-					let should_emit = await ec.shouldEmit(previous, current, time_diff);
-					if (should_emit) {
-						this.bus.next({
-							name: ec.name,
-							value: current,
-							timestamp: now
-						});
-					}
+				let should_emit = await ec.shouldEmit(previous, current, time_diff);
+				if (should_emit) {
+					this.bus.next({
+						name: ec.name,
+						value: current,
+						timestamp: now
+					});
 				}
 
 				// Set the current value
 				if (ec.set_param) {
-					this.valueStream.setParameter(ec.set_param, current);
+					let set_param_val = null;
+
+					// Check if optional callback is defined
+					if (ec.hasOwnProperty("getSetParamValue")) {
+						set_param_val = await ec.getSetParamValue(previous, current, time_diff);
+					} else {
+						set_param_val = current;
+					}
+
+					if (set_param_val) {
+						this.valueStream.setParameter(ec.set_param, set_param_val);
+					}
 				}
 
 				// Update the previous value

@@ -19,6 +19,10 @@ export interface ShouldEmitFunction {
 	(prev:any, curr:any, time_diff:any): boolean
 }
 
+export interface SetParamFunction {
+	(prev:any, curr:any, time_diff:any): boolean
+}
+
 export interface EventItemConfig {
 	name: string
 	set_param?: string
@@ -26,6 +30,7 @@ export interface EventItemConfig {
 	outputs?: Array<string>
 	calculate: CalculateFunction
 	shouldEmit: ShouldEmitFunction
+	getSetParamValue?: SetParamFunction
 }
 
 export interface StreamValue {
