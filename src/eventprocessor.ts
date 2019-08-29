@@ -110,7 +110,7 @@ export default class EventProcessor
 						set_param_val = current;
 					}
 
-					if (set_param_val) {
+					if (set_param_val !== false) {
 						this.valueStream.setParameter(ec.set_param, set_param_val);
 					}
 				}
