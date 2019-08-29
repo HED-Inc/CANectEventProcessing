@@ -77,7 +77,8 @@ export default class EventProcessor
 				} else {
 					current = await ec.calculate(previous, [...this.states[state_idx].values]);
 				}
-				if (!current) return;
+				// Returning false will skip
+				if (current === false) return;
 
 				// Get the current date timestamp
 				let now = new Date().getTime();
@@ -101,15 +102,14 @@ export default class EventProcessor
 
 				// Set the current value
 				if (ec.set_param) {
-					let set_param_val = null;
+					let set_param_val = current;
 
 					// Check if optional callback is defined
 					if (ec.hasOwnProperty("getSetParamValue")) {
 						set_param_val = await ec.getSetParamValue(previous, current, time_diff);
-					} else {
-						set_param_val = current;
 					}
 
+					// Validate
 					if (set_param_val !== false) {
 						this.valueStream.setParameter(ec.set_param, set_param_val);
 					}
