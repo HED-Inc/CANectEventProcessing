@@ -36,16 +36,6 @@ export default class EventProcessor
 			throw new Error('No event configuration given');
 		}
 
-		// Define variables
-		let param_idx,
-			state_idx,
-			current,
-			previous,
-			timestamp,
-			time_diff,
-			outputs,
-			now = null;
-
 		this.valuesStreamSub = this.valueStream.messages.subscribe((msg:any) => {
 			// Validate the value
 			if (!isValid(msg.value)) return;
@@ -58,11 +48,11 @@ export default class EventProcessor
 			// Iterate over each of the event configurations
 			this.eventConfigs.forEach(async ec => {
 				// Check if it is used in this function
-				param_idx = ec.params.indexOf(msg.label);
-				if (param_idx == -1) return;
+				let param_idx = ec.params.indexOf(msg.label);
+				if (!ec.params.includes(msg.label) || param_idx == -1) return;
 
 				// Find the current state
-				state_idx = this.states.findIndex(s => s.name == ec.name);
+				let state_idx = this.states.findIndex(s => s.name == ec.name);
 				if (state_idx == -1) return;
 
 				// Set the current value in the same param_idx
@@ -72,26 +62,29 @@ export default class EventProcessor
 				if (this.states[state_idx].values.includes(undefined)) return;
 
 				// Previous result
-				previous = this.states[state_idx].previous;
+				let previous = this.states[state_idx].previous;
 
 				// Determine if outputs are defined from previous callbacks
-				outputs = null;
+				let outputs = null;
 				if (ec.outputs && ec.outputs !== null) {
 					outputs = this.buildOutputs(ec.outputs);
 				}
 
 				// Invoke the callback
+				let current;
 				if (outputs) {
 					current = await ec.calculate(previous, [...this.states[state_idx].values], [...outputs]);
 				} else {
 					current = await ec.calculate(previous, [...this.states[state_idx].values]);
 				}
+				if (!current) return;
 
 				// Get the current date timestamp
-				now = new Date().getTime();
+				let now = new Date().getTime();
 
 				// Get the previous time
-				timestamp = this.states[state_idx].timestamp;
+				let time_diff = null;
+				let timestamp = this.states[state_idx].timestamp;
 				if (timestamp) {
 					time_diff = now - timestamp;
 				}
@@ -149,6 +142,11 @@ export default class EventProcessor
 				});
 			}
 		});
+	}
+
+	public getStates()
+	{
+		return this.states.map(obj => ({...obj}));
 	}
 
 	public getValue(name:string)
