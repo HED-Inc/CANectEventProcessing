@@ -1,17 +1,21 @@
 {
   "name": "canect-event-processing",
-  "version": "1.0.0",
-  "description": "",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
-  "scripts": {
-    "build": "tsc",
-    "start": "ts-node ./src/index.ts",
-    "prepare": "npm run build"
-  },
   "author": "HED",
   "license": "ISC",
+  "version": "1.0.0",
+  "description": "Dynamic event processor for CANect hardware",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "repository": "https://github.com/HED-Inc/canect-event-processing",
+  "scripts": {
+    "build": "tsc",
+    "prepare": "npm run build"
+  },
+  "files": [
+    "dist/index.js"
+  ],
   "dependencies": {
+    "dirty-json": "^0.7.1",
     "queueing-subject": "^0.3.4",
     "rxjs": "^6.5.2",
     "rxjs-websockets": "^7.0.2",
@@ -20,8 +24,6 @@
   "devDependencies": {
     "@types/node": "^12.7.1",
     "@types/ws": "^6.0.2",
-    "dotenv": "^8.0.0",
-    "ts-node": "^8.3.0",
     "typescript": "^3.5.3"
   }
 }

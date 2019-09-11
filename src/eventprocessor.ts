@@ -30,23 +30,19 @@ export default class EventProcessor
 		this.initExitHandler();
 	}
 
-	private async run()
+	private run()
 	{
-		if (!this.eventConfigs.length) {
-			throw new Error('No event configuration given');
-		}
-
 		this.valuesStreamSub = this.valueStream.messages.subscribe((msg:any) => {
-			// Validate the value
-			if (!isValid(msg.value)) return;
-
 			// Log incoming message if debug
 			if (this.debug) {
-				console.log(msg);
+				console.log(`Message: ${JSON.stringify(msg)}\n`);
 			}
 
+			// Validate the value, verify event configs exist
+			if (!isValid(msg.value) || !this.eventConfigs.length) return;
+
 			// Iterate over each of the event configurations
-			this.eventConfigs.forEach(async ec => {
+			this.eventConfigs.forEach(async (ec: EventItemConfig) => {
 				// Check if it is used in this function
 				let param_idx = ec.params.indexOf(msg.label);
 				if (!ec.params.includes(msg.label) || param_idx == -1) return;
@@ -165,6 +161,7 @@ export default class EventProcessor
 	public setDebug(debug:boolean)
 	{
 		this.debug = debug;
+		this.valueStream.setDebug(debug);
 	}
 
 	private findEvent(name:string)

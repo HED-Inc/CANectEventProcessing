@@ -1,21 +1,35 @@
-import WebSocket from "ws";
-import { QueueingSubject } from "queueing-subject";
-import { Subscription, Observable, merge } from "rxjs";
+import WebSocket from 'ws';
+import * as dJSON from 'dirty-json';
+import { QueueingSubject } from 'queueing-subject';
+import { Subscription, Observable, merge, throwError } from 'rxjs';
 import { StreamValue, ValueStreamConfig } from './interfaces';
-import { share, switchMap, map, filter, catchError } from "rxjs/operators";
+import {
+    share,
+    switchMap,
+    map,
+    filter,
+    catchError,
+    retryWhen,
+    delay,
+    take,
+    tap
+} from 'rxjs/operators';
 import makeWebSocketObservable, {
     normalClosureMessage,
     GetWebSocketResponses,
     WebSocketOptions
-} from "rxjs-websockets";
+} from 'rxjs-websockets';
 
 type WebSocketPayload = string | ArrayBuffer | Blob;
 
+const RETRY_LIMIT = 5;
+const RETRY_DELAY_MS = 500;
 const VPCA_APP_NAME = 'VPCA';
 const CHAT_APP_NAME = 'CHAT';
 
 export default class ValueStream
 {
+    private debug:boolean = false;
     private config:ValueStreamConfig;
 
     private vpcaInput:QueueingSubject<string>;
@@ -35,6 +49,11 @@ export default class ValueStream
         this.buildStream();
     }
 
+    public setDebug(debug:boolean)
+    {
+        this.debug = debug;
+    }
+
     private buildUrl(app_name:string)
     {
         return `ws://${this.config.ws_host}/${app_name}`;
@@ -50,19 +69,30 @@ export default class ValueStream
     {
         const { vpca, chat } = this.buildObservables();
 
+        // Define the retry strategy
+        const retryPipeline = retryWhen(errors =>
+            errors.pipe(
+                delay(RETRY_DELAY_MS),
+                take(RETRY_LIMIT),
+                tap(error => console.log(error))
+            )
+        );
+
         // Create each of the message streams
         let vpca_messages:Observable<WebSocketPayload>;
-        if (vpca && this.config.vpca_group) {
+        if (vpca && this.vpcaInput) {
             vpca_messages = vpca.pipe(
               switchMap((getResponses:GetWebSocketResponses) => getResponses(this.vpcaInput)),
+              retryPipeline,
               share()
             );
         }
 
         let chat_messages:Observable<WebSocketPayload>;
-        if (chat && this.config.chat_group) {
+        if (chat && this.chatInput) {
             chat_messages = chat.pipe(
               switchMap((getResponses:GetWebSocketResponses) => getResponses(this.chatInput)),
+              retryPipeline,
               share()
             );
         }
@@ -83,6 +113,7 @@ export default class ValueStream
         this.messages = all_messages.pipe(
             map(val => this.parse(val)),
             filter(val => val != undefined),
+            catchError(error => console.log('Error', error)),
             share()
         );
     }
@@ -147,12 +178,13 @@ export default class ValueStream
     private parse(data:any)
     {
         let parsed = this.parseRaw(data)
-        if (parsed && parsed["MGP"]) {
+        // TODO handle GPS param support (subval)
+        if (parsed && parsed['MGP']) {
             return {
-                id: parsed["MGP"]["MGPID"],
-                label: parsed["MGP"]["MGPLabel"],
-                value: parsed["MGP"]["ParamVal"],
-                timestamp: parsed["MGP"]["Timestamp"]
+                id: parsed['MGP']['MGPID'],
+                label: parsed['MGP']['MGPLabel'],
+                value: parsed['MGP']['ParamVal'],
+                timestamp: parsed['MGP']['Timestamp']
             };
         }
     }
@@ -161,10 +193,14 @@ export default class ValueStream
     {
         let parsed = null;
         try {
-            if (typeof msg == "string" && msg.trim() != "") {
-                parsed = JSON.parse(msg.trim());
+            if (typeof msg == 'string' && msg.trim() != '') {
+                parsed = dJSON.parse(msg.trim());
             }
-        } catch (e) {}
+        } catch (e) {
+            if (this.debug) {
+                console.log('ValueStream.parseRaw -> error', e);
+            }
+        }
 
         return parsed;
     }
