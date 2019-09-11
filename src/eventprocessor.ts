@@ -1,7 +1,13 @@
 import { share } from 'rxjs/operators';
 import ValueStream from './valuestream';
 import { Observable, Subject, Subscription } from 'rxjs';
-import { EventItemConfig, EmittedEvent, StateElement, ValueStreamConfig } from './interfaces';
+import {
+	StreamValue,
+	EmittedEvent,
+	StateElement,
+	EventItemConfig,
+	ValueStreamConfig
+} from './interfaces';
 
 // Helper function to filter invalid values
 const NULL_STR = "NULL";
@@ -23,16 +29,20 @@ export default class EventProcessor
 	{
 		this.valueStream = new ValueStream(streamConfig);
 
-		if (eventConfigs && eventConfigs.length) {
+		if (Array.isArray(eventConfigs) && eventConfigs.length) {
 			this.addEvents(eventConfigs);
 		}
 
 		this.initExitHandler();
 	}
 
-	private run()
+	public run()
 	{
-		this.valuesStreamSub = this.valueStream.messages.subscribe((msg:any) => {
+		if (this.valuesStreamSub) {
+			this.valuesStreamSub.unsubscribe();
+		}
+
+		this.valuesStreamSub = this.valueStream.messages.subscribe((msg:StreamValue) => {
 			// Log incoming message if debug
 			if (this.debug) {
 				console.log(`Message: ${JSON.stringify(msg)}\n`);
@@ -153,7 +163,7 @@ export default class EventProcessor
 		return this.states.map(obj => ({...obj}));
 	}
 
-	public getValue(name:string)
+	public getStateValue(name:string)
 	{
 		return this.states.find((s) => s.name == name);
 	}
@@ -171,7 +181,7 @@ export default class EventProcessor
 
 	public addEvents(events:Array<EventItemConfig>)
 	{
-		events.map(e => this.addEvent(e, false));
+		events.forEach(e => this.addEvent(e, false));
 		this.buildStates();
 		return this;
 	}

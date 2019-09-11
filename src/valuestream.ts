@@ -11,8 +11,7 @@ import {
     catchError,
     retryWhen,
     delay,
-    take,
-    tap
+    take
 } from 'rxjs/operators';
 import makeWebSocketObservable, {
     normalClosureMessage,
@@ -73,8 +72,7 @@ export default class ValueStream
         const retryPipeline = retryWhen(errors =>
             errors.pipe(
                 delay(RETRY_DELAY_MS),
-                take(RETRY_LIMIT),
-                tap(error => console.log(error))
+                take(RETRY_LIMIT)
             )
         );
 
@@ -113,13 +111,16 @@ export default class ValueStream
         this.messages = all_messages.pipe(
             map(val => this.parse(val)),
             filter(val => val != undefined),
-            catchError(error => console.log('Error', error)),
             share()
         );
     }
 
     public setParameter(name:string|number, value:string|number)
     {
+        if (!this.vpcaInput) {
+            throw new Error('VPCA has not been configured');
+        }
+
         const r = {
             WSP : {
                 WSPID : name,
