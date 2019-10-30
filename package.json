@@ -11,6 +11,9 @@
     "build": "tsc",
     "prepare": "npm run build"
   },
+  "files": [
+    "dist/**/*"
+  ],
   "dependencies": {
     "dirty-json": "^0.7.1",
     "queueing-subject": "^0.3.4",
