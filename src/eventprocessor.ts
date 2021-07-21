@@ -1,232 +1,243 @@
-import { share } from 'rxjs/operators';
-import ValueStream from './valuestream';
-import { Observable, Subject, Subscription } from 'rxjs';
+import ValueStream from "./valuestream";
+import { Subject, Subscription } from "rxjs";
 import {
-	StreamValue,
-	EmittedEvent,
-	StateElement,
-	EventItemConfig,
-	ValueStreamConfig
-} from './interfaces';
+  StreamValue,
+  EmittedEvent,
+  StateElement,
+  EventItemConfig,
+  ValueStreamConfig,
+} from "./interfaces";
 
 // Helper function to filter invalid values
 const NULL_STR = "NULL";
-const isValid = (val:any) => val != NULL_STR && val != "";
+const isValid = (val: any) => val != NULL_STR && val != "";
 
-export default class EventProcessor
-{
-	private debug:boolean = false;
+export default class EventProcessor {
+  private debug: boolean = false;
 
-	private valueStream:ValueStream;
-	private valuesStreamSub:Subscription;
+  private valueStream: ValueStream;
+  private valuesStreamSub: Subscription;
 
-	private states:Array<StateElement> = [];
-	private eventConfigs:Array<EventItemConfig> = [];
+  private states: Array<StateElement> = [];
+  private eventConfigs: Array<EventItemConfig> = [];
 
-	private bus:Subject<EmittedEvent> = new Subject<EmittedEvent>();
+  private bus: Subject<EmittedEvent> = new Subject<EmittedEvent>();
 
-	public constructor(streamConfig:ValueStreamConfig, eventConfigs?:Array<EventItemConfig>)
-	{
-		this.valueStream = new ValueStream(streamConfig);
+  private buffer: any = {};
 
-		if (Array.isArray(eventConfigs) && eventConfigs.length) {
-			this.addEvents(eventConfigs);
-		}
+  public constructor(
+    streamConfig: ValueStreamConfig,
+    eventConfigs?: Array<EventItemConfig>
+  ) {
+    this.valueStream = new ValueStream(streamConfig);
 
-		this.initExitHandler();
-	}
+    if (Array.isArray(eventConfigs) && eventConfigs.length) {
+      this.addEvents(eventConfigs);
+    }
 
-	public run()
-	{
-		if (this.valuesStreamSub) {
-			this.valuesStreamSub.unsubscribe();
-		}
+    this.initExitHandler();
+  }
 
-		this.valuesStreamSub = this.valueStream.messages.subscribe((msg:StreamValue) => {
-			// Log incoming message if debug
-			if (this.debug) {
-				console.log(`Message: ${JSON.stringify(msg)}\n`);
-			}
+  public run() {
+    if (this.valuesStreamSub) {
+      this.valuesStreamSub.unsubscribe();
+    }
 
-			// Validate the value, verify event configs exist
-			if (!isValid(msg.value) || !this.eventConfigs.length) return;
+    this.valuesStreamSub = this.valueStream.messages.subscribe(
+      (msg: StreamValue) => {
+        // Validate the value, verify event configs exist
+        if (!isValid(msg.value) || !this.eventConfigs.length) return;
 
-			// Iterate over each of the event configurations
-			this.eventConfigs.forEach(async (ec: EventItemConfig) => {
-				// Check if it is used in this function
-				let param_idx = ec.params.indexOf(msg.label);
-				if (!ec.params.includes(msg.label) || param_idx == -1) return;
+        // Log incoming message if debug
+        if (this.debug) {
+          console.log(`Message: ${JSON.stringify(msg)}\n`);
+        }
 
-				// Find the current state
-				let state_idx = this.states.findIndex(s => s.name == ec.name);
-				if (state_idx == -1) return;
+        // Add to buffer
+        this.buffer[msg.id] = msg;
 
-				// Set the current value in the same param_idx
-				this.states[state_idx].values[param_idx] = msg.value;
+        // Iterate over each of the event configurations
+        this.eventConfigs.forEach(async (ec: EventItemConfig) => {
+          // Check if it is used in this function
+          let param_idx = ec.params.indexOf(msg.label);
+          if (!ec.params.includes(msg.label) || param_idx == -1) return;
 
-				// Check if all values are set
-				if (this.states[state_idx].values.includes(undefined)) return;
+          // Find the current state
+          let state_idx = this.states.findIndex((s) => s.name == ec.name);
+          if (state_idx == -1) return;
 
-				// Previous result
-				let previous = this.states[state_idx].previous;
+          // Set the current value in the same param_idx
+          this.states[state_idx].values[param_idx] = msg.value;
 
-				// Determine if outputs are defined from previous callbacks
-				let outputs = null;
-				if (ec.outputs && ec.outputs !== null) {
-					outputs = this.buildOutputs(ec.outputs);
-				}
+          // Check if all values are set
+          if (
+            this.states[state_idx].values.includes(undefined) ||
+            this.states[state_idx].values.includes(null)
+          )
+            return;
 
-				// Invoke the callback
-				let current;
-				if (outputs) {
-					current = await ec.calculate(previous, [...this.states[state_idx].values], [...outputs]);
-				} else {
-					current = await ec.calculate(previous, [...this.states[state_idx].values]);
-				}
-				// Returning false will skip
-				if (current === false) return;
+          // Previous result
+          let previous = this.states[state_idx].previous;
 
-				// Get the current date timestamp
-				let now = new Date().getTime();
+          // Determine if outputs are defined from previous callbacks
+          let outputs = null;
+          if (ec.outputs && ec.outputs !== null) {
+            outputs = this.buildOutputs(ec.outputs);
+          }
 
-				// Get the previous time
-				let time_diff = null;
-				let timestamp = this.states[state_idx].timestamp;
-				if (timestamp) {
-					time_diff = now - timestamp;
-				}
+          // Invoke the callback
+          let current;
+          if (outputs) {
+            current = await ec.calculate(
+              previous,
+              [...this.states[state_idx].values],
+              [...outputs]
+            );
+          } else {
+            current = await ec.calculate(previous, [
+              ...this.states[state_idx].values,
+            ]);
+          }
+          // Returning false will skip
+          if (current === false) return;
 
-				// Determine if the event should fire
-				let should_emit = await ec.shouldEmit(previous, current, time_diff);
-				if (should_emit) {
-					this.bus.next({
-						name: ec.name,
-						value: current,
-						timestamp: now
-					});
-				}
+          // Get the current date timestamp
+          let now = new Date().getTime();
 
-				// Set the current value
-				if (ec.set_param) {
-					let set_param_val = current;
+          // Get the previous time
+          let time_diff = null;
+          let timestamp = this.states[state_idx].timestamp;
+          if (timestamp) {
+            time_diff = now - timestamp;
+          }
 
-					// Check if optional callback is defined
-					if (ec.hasOwnProperty("getSetParamValue")) {
-						set_param_val = await ec.getSetParamValue(previous, current, time_diff);
-					}
+          // Determine if the event should fire
+          let should_emit = await ec.shouldEmit(previous, current, time_diff);
+          if (should_emit) {
+            this.bus.next({
+              name: ec.name,
+              value: current,
+              timestamp: now,
+              payload: Object.values(this.buffer),
+            });
+          }
 
-					// Validate
-					if (set_param_val !== false) {
-						this.valueStream.setParameter(ec.set_param, set_param_val);
-					}
-				}
+          // Set the current value
+          if (ec.set_param) {
+            let set_param_val = current;
 
-				// Update the previous value
-				this.states[state_idx].previous = current;
-				this.states[state_idx].timestamp = now;
-			});
-		}, (error) => {
-			console.log('ERROR', error);
-		});
-	}
+            // Check if optional callback is defined
+            if (ec.hasOwnProperty("getSetParamValue")) {
+              set_param_val = await ec.getSetParamValue(
+                previous,
+                current,
+                time_diff
+              );
+            }
 
-	private buildOutputs(list:Array<string>):Array<any>
-	{
-		// Filter -> sort -> map to get array of values in order
-		return this.states.filter(s => list.includes(s.name))
-			.sort((a, b) => list.indexOf(a.name) - list.indexOf(b.name))
-			.map(s => s.previous);
-	}
+            // Validate
+            if (set_param_val !== false) {
+              this.valueStream.setParameter(ec.set_param, set_param_val);
+            }
+          }
 
-	private buildStates()
-	{
-		// Filter out any removed
-		const event_names = this.eventConfigs.map(ec => ec.name);
-		this.states = this.states.filter(s => event_names.includes(s.name));
+          // Update the previous value
+          this.states[state_idx].previous = current;
+          this.states[state_idx].timestamp = now;
+        });
+      },
+      (error) => {
+        console.log("ERROR", error);
+      }
+    );
+  }
 
-		// Add any not in
-		const state_names = this.states.map(s => s.name);
-		this.eventConfigs.forEach(ec => {
-			if (!state_names.includes(ec.name)) {
-				this.states.push({
-					name: ec.name,
-					values: new Array(ec.params.length),
-					previous: null,
-					timestamp: 0
-				});
-			}
-		});
-	}
+  private buildOutputs(list: Array<string>): Array<any> {
+    // Filter -> sort -> map to get array of values in order
+    return this.states
+      .filter((s) => list.includes(s.name))
+      .sort((a, b) => list.indexOf(a.name) - list.indexOf(b.name))
+      .map((s) => s.previous);
+  }
 
-	public getStates()
-	{
-		return this.states.map(obj => ({...obj}));
-	}
+  private buildStates() {
+    // Filter out any removed
+    const event_names = this.eventConfigs.map((ec) => ec.name);
+    this.states = this.states.filter((s) => event_names.includes(s.name));
 
-	public getStateValue(name:string)
-	{
-		return this.states.find((s) => s.name == name);
-	}
+    // Add any not in
+    const state_names = this.states.map((s) => s.name);
+    this.eventConfigs.forEach((ec) => {
+      if (!state_names.includes(ec.name)) {
+        this.states.push({
+          name: ec.name,
+          values: new Array(ec.params.length),
+          previous: null,
+          timestamp: 0,
+        });
+      }
+    });
+  }
 
-	public setDebug(debug:boolean)
-	{
-		this.debug = debug;
-		this.valueStream.setDebug(debug);
-	}
+  public getStates() {
+    return this.states.map((obj) => ({ ...obj }));
+  }
 
-	private findEvent(name:string)
-	{
-		return this.eventConfigs.find(e => e.name == name);
-	}
+  public getStateValue(name: string) {
+    return this.states.find((s) => s.name == name);
+  }
 
-	public addEvents(events:Array<EventItemConfig>)
-	{
-		events.forEach(e => this.addEvent(e, false));
-		this.buildStates();
-		return this;
-	}
+  public setDebug(debug: boolean) {
+    this.debug = debug;
+    this.valueStream.setDebug(debug);
+  }
 
-	public addEvent(event:EventItemConfig, renew:boolean = true)
-	{
-		let e = this.findEvent(event.name);
-		if (!e) {
-			this.eventConfigs.push(event);
-			if (renew) {
-				this.buildStates();
-			}
-		}
-		return this;
-	}
+  private findEvent(name: string) {
+    return this.eventConfigs.find((e) => e.name == name);
+  }
 
-	public removeEvent(name:string)
-	{
-		let e = this.findEvent(name);
-		if (e) {
-			this.eventConfigs.splice(this.eventConfigs.indexOf(e), 1);
-			this.buildStates();
-		}
-		return this;
-	}
+  public addEvents(events: Array<EventItemConfig>) {
+    events.forEach((e) => this.addEvent(e, false));
+    this.buildStates();
+    return this;
+  }
 
-	public subscribe(callback):Subscription
-	{
-		if (!this.valuesStreamSub) {
-			this.run();
-		}
+  public addEvent(event: EventItemConfig, renew: boolean = true) {
+    let e = this.findEvent(event.name);
+    if (!e) {
+      this.eventConfigs.push(event);
+      if (renew) {
+        this.buildStates();
+      }
+    }
+    return this;
+  }
 
-		return this.bus.subscribe(callback);
-	}
+  public removeEvent(name: string) {
+    let e = this.findEvent(name);
+    if (e) {
+      this.eventConfigs.splice(this.eventConfigs.indexOf(e), 1);
+      this.buildStates();
+    }
+    return this;
+  }
 
-	public unsubscribe()
-	{
-		if (this.valuesStreamSub) {
-			this.valuesStreamSub.unsubscribe();
-		}
-	}
+  public subscribe(callback): Subscription {
+    if (!this.valuesStreamSub) {
+      this.run();
+    }
 
-	private initExitHandler()
-	{
-		// Unsubscribing
-		process.on('exit', () => this.unsubscribe());
-	}
+    return this.bus.subscribe(callback);
+  }
+
+  public unsubscribe() {
+    if (this.valuesStreamSub) {
+      this.valuesStreamSub.unsubscribe();
+    }
+  }
+
+  private initExitHandler() {
+    // Unsubscribing
+    process.on("exit", () => this.unsubscribe());
+  }
 }
