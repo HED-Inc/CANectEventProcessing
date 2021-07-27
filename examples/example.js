@@ -56,12 +56,12 @@ let config = {
   ws_host: "10.1.1.1",
   vpca_group: "Event_Processing",
   chat_group: "Event_Processing",
-  max_rate: 50,
-  min_rate: 100,
+  max_rate: 100,
+  min_rate: 200,
 };
 
 let ep = new EventProcessor(config, events);
-// ep.setDebug(true);
+ep.setDebug(true);
 
 let sub = ep.subscribe((e) => {
   console.log("EVENT", e);
